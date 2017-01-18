@@ -44,7 +44,7 @@
 # 		refresh continu
 # 7 & 8 : correction de bugs
 # 9 : janvier 2017
-
+# 10 : GITHUB first commit
 
 
 # 										TODO
@@ -66,6 +66,7 @@ import smtplib
 import logging
 import socket
 from Adafruit_IO import Client
+import token
 
 
 ######################################## FONCTIONS ############################################
@@ -139,11 +140,11 @@ def doorclosed():
 # appelé par les différentes fct (lancement, ouverture, fermeture, longue ouverture)
 def mail(mailmsg):
 	try:
-		GMAIL_USERNAME = 'leclemenceau'
-		GMAIL_PASSWORD = 'wtwwuqwtyrmuorrk'
+		GMAIL_USERNAME = token.GMAIL_USERNAME
+		GMAIL_PASSWORD = token.GMAIL_PASSWORD
 
 		email_subject = "MSG d'alerte du Raspberry Pi : porte d'entrée"
-		recipient = "qu3nt1n@gmail.com"
+		recipient = token.recipient
 		body_of_email = mailmsg
 
 		session = smtplib.SMTP('smtp.gmail.com', 587)
@@ -179,8 +180,8 @@ def socketconnect(socketmsg):
 	mylist.append(strftime("%Y-%m-%d %H:%M:%S"))
 
 	print mylist[0] #affiche le msg envoyé - à retirer une fois terminé
-	address = '192.168.0.30' #rpiCamera
-	port = 8089 #port random, meme que server
+	address = token.address #rpiCamera
+	port = token.port #port random, meme que server
 	clientsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #parametres du socket
 	try: #pour eviter de planter si le server est down
 		clientsocket.connect((address, port)) #ouvre la connexion
@@ -196,7 +197,7 @@ def socketconnect(socketmsg):
 
 #adaiot
 # Import library and create instance of REST client.
-aio = Client('85f3a92915624c0090ad67be023e618f')
+aio = token.aio
 
 #GPIO Setup
 GPIO.setmode(GPIO.BCM)
