@@ -29,31 +29,6 @@
 # 				reeddoor.log :	log des connexions
 # adaiot : 		publie les chgts d'état sur adaiot
 
-# 									CHANGELOG
-
-# 1 test : juillet 2016
-# 2 mail et installation
-# 3 logs locaux
-# 4 upload status adafruit io
-# 5 plantage !!! DONE - sept 2016
-# 		pb : connexion avec smtp plante : create_connexion
-# 		socket.error: [Errno 101] Network is unreachable
-# 		solution long terme : si le smtp plante, try execpt un error et pas planter !!!!!
-# 6 connexion via socket au rpi2 : octobre 2016
-# 		envoi des msg : DONE
-# 		refresh continu
-# 7 & 8 : correction de bugs
-# 9 : janvier 2017
-# 10 : GITHUB first commit
-
-
-# 										TODO
-# separer les messages logs dans 3 fichiers : etats, socket, mail
-# ameliorer socket pour gérer la connexion et s'assurer que les chgts d'état sont reportés
-# dans socket créer visualisation serveur
-# clarifier le code, séparer les modules utilisables dans d'autres fichiers (mail msg etc.)
-# deporter les identifiants dans un autre fichier et les importer
-# publier sur GITHUB pour archivage
 
 
 
@@ -66,7 +41,7 @@ import smtplib
 import logging
 import socket
 from Adafruit_IO import Client
-import token
+import tokenss #token.py est reserve attention
 
 
 ######################################## FONCTIONS ############################################
@@ -140,11 +115,11 @@ def doorclosed():
 # appelé par les différentes fct (lancement, ouverture, fermeture, longue ouverture)
 def mail(mailmsg):
 	try:
-		GMAIL_USERNAME = token.GMAIL_USERNAME
-		GMAIL_PASSWORD = token.GMAIL_PASSWORD
+		GMAIL_USERNAME = tokenss.GMAIL_USERNAME
+		GMAIL_PASSWORD = tokenss.GMAIL_PASSWORD
 
 		email_subject = "MSG d'alerte du Raspberry Pi : porte d'entrée"
-		recipient = token.recipient
+		recipient = tokenss.recipient
 		body_of_email = mailmsg
 
 		session = smtplib.SMTP('smtp.gmail.com', 587)
@@ -180,8 +155,8 @@ def socketconnect(socketmsg):
 	mylist.append(strftime("%Y-%m-%d %H:%M:%S"))
 
 	print mylist[0] #affiche le msg envoyé - à retirer une fois terminé
-	address = token.address #rpiCamera
-	port = token.port #port random, meme que server
+	address = tokenss.address #rpiCamera
+	port = tokenss.port #port random, meme que server
 	clientsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #parametres du socket
 	try: #pour eviter de planter si le server est down
 		clientsocket.connect((address, port)) #ouvre la connexion
@@ -197,7 +172,8 @@ def socketconnect(socketmsg):
 
 #adaiot
 # Import library and create instance of REST client.
-aio = token.aio
+# aio = tokenss.aio
+aio = Client(tokenss.aiokey)
 
 #GPIO Setup
 GPIO.setmode(GPIO.BCM)

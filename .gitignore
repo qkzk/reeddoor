@@ -89,6 +89,7 @@ ENV/
 .ropeproject
 
 #Localfiles
+tokenss.py
 token.py
 
 #backup
