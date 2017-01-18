@@ -4,23 +4,23 @@ Elle est surveillée à l'aide d'un capteur reed
 
 ## maintenance
 
-EST CE QUE LE SCRIPT TOURNE ??
+EST CE QUE LE SCRIPT TOURNE ??  
 ps -ef | grep python
 
 
-AFFICHER LES LOGS PYTHON :
+AFFICHER LES LOGS PYTHON :  
 tail -s 0.1 -f /home/pi/reeddoorlog/reeddoor.pi.log
 
 
-AFFICHER LES LOGS DU SCRIPT LUI MEME
+AFFICHER LES LOGS DU SCRIPT LUI MEME  
 nano reeddoorlog/reeddoor.log
 
-CRONTAB sudo crontab -e
-@reboot /usr/bin/python /home/pi/testreed7.py >> /home/pi/reeddoorlog/reeddoor5.pi.log 2>&1
+CRONTAB sudo crontab -e  
+@reboot /usr/bin/python /home/pi/testreed.py >> /home/pi/reeddoorlog/reeddoor.pi.log 2>&1
 
 
 LANCER MANUELLEMENT
-sudo /usr/bin/python /home/pi/testreed7.py >> /home/pi/reeddoorlog/reeddoor5.pi.log 2>&1 &
+sudo /usr/bin/python /home/pi/testreed.py >> /home/pi/reeddoorlog/reeddoor.pi.log 2>&1 &
 
 -----------------
 
