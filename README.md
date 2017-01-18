@@ -1,3 +1,9 @@
+#reeddoor
+script python qui envoie différents messages à chaque ouverture et fermeture d'une porte.
+Elle est surveillée à l'aide d'un capteur reed
+
+## maintenance
+
 EST CE QUE LE SCRIPT TOURNE ??
 ps -ef | grep python
 
