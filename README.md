@@ -16,7 +16,7 @@ AFFICHER LES LOGS DU SCRIPT LUI MEME :
 nano reeddoorlog/reeddoor.log
 
 
-# installation et usage
+## installation et usage
 
 1. copier le script à la racine  
 1. créer le crontab
