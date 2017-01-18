@@ -12,15 +12,28 @@ AFFICHER LES LOGS PYTHON :
 tail -s 0.1 -f /home/pi/reeddoorlog/reeddoor.pi.log
 
 
-AFFICHER LES LOGS DU SCRIPT LUI MEME  
+AFFICHER LES LOGS DU SCRIPT LUI MEME :
 nano reeddoorlog/reeddoor.log
 
-CRONTAB sudo crontab -e  
-@reboot /usr/bin/python /home/pi/testreed.py >> /home/pi/reeddoorlog/reeddoor.pi.log 2>&1
 
+# installation et usage
+
+1. copier le script à la racine  
+1. créer le crontab
+1. rebooter, checker les logs (voir plus haut)  
+1. renommer `token_example.py` en `token.py` et l'éditer  
+1. le script envoie un mail à l'adresse indiquée dans token.py à chaque lancement
+1. il tente de se connecter à un server socket régulièrement pour indiquer son état
+1. il tente d'envoyer des msg à adafruit_IO
+1. il tente d'envoyer des mails à chaque ouverture  
+
+
+CRONTAB sudo crontab -e  
+`@reboot /usr/bin/python /home/pi/testreed.py >> /home/pi/reeddoorlog/reeddoor.pi.log 2>&1`
 
 LANCER MANUELLEMENT
-sudo /usr/bin/python /home/pi/testreed.py >> /home/pi/reeddoorlog/reeddoor.pi.log 2>&1 &
+`sudo /usr/bin/python /home/pi/testreed.py >> /home/pi/reeddoorlog/reeddoor.pi.log 2>&1 &`
+
 
 -----------------
 
