@@ -87,4 +87,14 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+#Localfiles
 token.py
+
+#backup
+#old
+
+backup/
+old/
+testreed10.py
+testreed9.py
