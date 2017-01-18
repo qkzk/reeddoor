@@ -1,0 +1,16 @@
+testreed4.py plante
+
+objectif du script :
+		écoute un reed via le gpio :  
+			qd il change il log, :
+				log
+				met à jour adafruit
+				envoie un mail via smtp.gmail.com
+				
+pb : connexion avec smtp plante : create_connexion
+socket.error: [Errno 101] Network is unreachable
+
+solution temporaire : relancer automatiquement le script très régulièrement, ttes les minutes
+		check si le script est lancé sinon le lancer
+		
+solution long terme : si le smtp plante, raise un error et pas planter !!!!!

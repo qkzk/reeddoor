@@ -1,0 +1,1 @@
+@reboot /usr/bin/python /home/pi/testreed5.py >> /home/pi/reeddoorlog/reeddoor5.pi.log 2>&1
