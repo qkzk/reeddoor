@@ -1,4 +1,4 @@
-EST CE QUE LE SCRIPT TOURNE ?
+EST CE QUE LE SCRIPT TOURNE ??
 ps -ef | grep python
 
 
