@@ -96,5 +96,6 @@ token.py
 
 backup/
 old/
+dev/
 testreed10.py
 testreed9.py
