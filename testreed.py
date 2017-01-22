@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+
+
 ###################################### IMPORTS  ##############################################
 
 import RPi.GPIO as GPIO
@@ -9,8 +11,9 @@ from time import strftime
 import smtplib
 import logging
 import socket
-from Adafruit_IO import Client
-import token
+# import Adafruit_IO import Client
+from Adafruit_IO import *
+import tokenss
 
 
 ######################################## FONCTIONS ############################################
@@ -50,7 +53,7 @@ def dooropened():
 	if t%20==0: #temps d'alerte x5 secondes
 		longopen(t)
 		socketconnect(str(time.time())+" up O") #envoie un msg de up au socketserver avec le temps en s
-		aiosend('Door4Status', "okay : opened")
+		aiosend('Door4Status', "{} : opened".format(time.strftime("%c")))
 
 #fermeture de la porte
 #parameters : aucun
@@ -74,13 +77,13 @@ def doorclosed():
 	f=f+1
 	if f%40==0: #fermee depuis 5s
 		socketconnect(str(time.time())+" up 1") #envoie un msg de up au socketserver
-		aiosend('Door4Status', 'okay : closed')
+		aiosend('Door4Status', "{} : closed".format(time.strftime("%c")))
 
 def aiosend(sendmsg,feed):
 	try:
 		aio.send(sendmsg,feed)
-	except Adafruit_IO.errors.RequestError:
-		print("aio error service unreachable")
+	except errors.RequestError as e:
+		print e
 		pass
 	except:
 		raise
@@ -92,11 +95,11 @@ def aiosend(sendmsg,feed):
 # appelé par les différentes fct (lancement, ouverture, fermeture, longue ouverture)
 def mail(mailmsg):
 	try:
-		GMAIL_USERNAME = token.GMAIL_USERNAME
-		GMAIL_PASSWORD = token.GMAIL_PASSWORD
+		GMAIL_USERNAME = tokenss.GMAIL_USERNAME
+		GMAIL_PASSWORD = tokenss.GMAIL_PASSWORD
 
 		email_subject = "MSG d'alerte du Raspberry Pi : porte d'entrée"
-		recipient = token.recipient
+		recipient = tokenss.recipient
 		body_of_email = mailmsg
 
 		session = smtplib.SMTP('smtp.gmail.com', 587)
@@ -132,8 +135,8 @@ def socketconnect(socketmsg):
 	mylist.append(strftime("%Y-%m-%d %H:%M:%S"))
 
 	print mylist[0] #affiche le msg envoyé - à retirer une fois terminé
-	address = token.address #rpiCamera
-	port = token.port #port random, meme que server
+	address = tokenss.address #rpiCamera
+	port = tokenss.port #port random, meme que server
 	clientsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #parametres du socket
 	try: #pour eviter de planter si le server est down
 		clientsocket.connect((address, port)) #ouvre la connexion
@@ -149,7 +152,7 @@ def socketconnect(socketmsg):
 
 #adaiot
 # Import library and create instance of REST client.
-aio = token.aio
+aio = Client(tokenss.aioclient)
 
 #GPIO Setup
 GPIO.setmode(GPIO.BCM)
