@@ -1,37 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-
-#                              test reed
-
-# programme python a installer dans /home/pi
-
-# lit un capteur magnétique type REED sur la porte d'entrée
-# connecté au GPIO 18 (signal) et GPIO Ground
-# lancé par un crontab
-
-# à chaque changement d'état du capteur il lance une fonction
-# dooropened() si la porte est ouverte 1 :
-# doorclosed() si la porte est fermée 0
-# faille de sécurité un aimant bien placé empechera le capteur de réagir
-
-# au lancement du script il envoie un mail
-# dooropened : 	lance un timer (toutes les 5 sec un msg)
-# 				lance un msg : socket, log & mail
-# doorclosed :	envoie un msg avec la durée d'ouverture transmise par dooropened
-
-# statut : 		qqsoit l'etat il envoie un up toutes les 5 sec par socket
-
-# mail : 		utilise le gmail de google
-# socket :		socketserver sur RPI2 (camera) (écoute et parse les msg, réagit en fct (gif des ouvertures))
-# logs : 		lisibles dans /home/pi/reeddoorlog/
-# 				reeddor5.pi.log : logs des messages enregristrés
-# 				reeddoor.log :	log des connexions
-# adaiot : 		publie les chgts d'état sur adaiot
-
-
-
-
 ###################################### IMPORTS  ##############################################
 
 import RPi.GPIO as GPIO
@@ -41,7 +10,7 @@ import smtplib
 import logging
 import socket
 from Adafruit_IO import Client
-import tokenss #token.py est reserve attention
+import token
 
 
 ######################################## FONCTIONS ############################################
@@ -70,8 +39,8 @@ def dooropened():
 
 	if t==0:
 		# Envoie la valeur 0 au feed nommé 'Door'
-		aio.send('Door', 0)
-		aio.send('porte', 'Opened')
+		aiosend('Door', 0)
+		aiosend('porte', 'Opened')
 		logging.warning('%s', 'Ouverture porte')
 		if SENDMAIL:
 			mail(' Ouverture porte !')
@@ -81,7 +50,7 @@ def dooropened():
 	if t%20==0: #temps d'alerte x5 secondes
 		longopen(t)
 		socketconnect(str(time.time())+" up O") #envoie un msg de up au socketserver avec le temps en s
-		aio.send('Door4Status', "okay : opened")
+		aiosend('Door4Status', "okay : opened")
 
 #fermeture de la porte
 #parameters : aucun
@@ -92,8 +61,8 @@ def doorclosed():
 	global f #durée de fermeture de la porte
 	if status_door==0:
 		#envoie la valeur 1 au feed nommé "Door"
-		aio.send('Door', 1)
-		aio.send('porte', 'Closed')
+		aiosend('Door', 1)
+		aiosend('porte', 'Closed')
 		print('door stayed opened for ' + str(t/5) + ' secs')
 		logging.warning('%s', 'La porte est restée ouverte ' + str(t/5) + ' secondes')
 		if SENDMAIL:
@@ -105,8 +74,16 @@ def doorclosed():
 	f=f+1
 	if f%40==0: #fermee depuis 5s
 		socketconnect(str(time.time())+" up 1") #envoie un msg de up au socketserver
-		aio.send('Door4Status', 'okay : closed')
+		aiosend('Door4Status', 'okay : closed')
 
+def aiosend(sendmsg,feed):
+	try:
+		aio.send(sendmsg,feed)
+	except Adafruit_IO.errors.RequestError:
+		print("aio error service unreachable")
+		pass
+	except:
+		raise
 
 
 
@@ -115,11 +92,11 @@ def doorclosed():
 # appelé par les différentes fct (lancement, ouverture, fermeture, longue ouverture)
 def mail(mailmsg):
 	try:
-		GMAIL_USERNAME = tokenss.GMAIL_USERNAME
-		GMAIL_PASSWORD = tokenss.GMAIL_PASSWORD
+		GMAIL_USERNAME = token.GMAIL_USERNAME
+		GMAIL_PASSWORD = token.GMAIL_PASSWORD
 
 		email_subject = "MSG d'alerte du Raspberry Pi : porte d'entrée"
-		recipient = tokenss.recipient
+		recipient = token.recipient
 		body_of_email = mailmsg
 
 		session = smtplib.SMTP('smtp.gmail.com', 587)
@@ -155,8 +132,8 @@ def socketconnect(socketmsg):
 	mylist.append(strftime("%Y-%m-%d %H:%M:%S"))
 
 	print mylist[0] #affiche le msg envoyé - à retirer une fois terminé
-	address = tokenss.address #rpiCamera
-	port = tokenss.port #port random, meme que server
+	address = token.address #rpiCamera
+	port = token.port #port random, meme que server
 	clientsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #parametres du socket
 	try: #pour eviter de planter si le server est down
 		clientsocket.connect((address, port)) #ouvre la connexion
@@ -172,8 +149,7 @@ def socketconnect(socketmsg):
 
 #adaiot
 # Import library and create instance of REST client.
-# aio = tokenss.aio
-aio = Client(tokenss.aiokey)
+aio = token.aio
 
 #GPIO Setup
 GPIO.setmode(GPIO.BCM)
