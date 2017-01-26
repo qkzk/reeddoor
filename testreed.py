@@ -79,17 +79,20 @@ def doorclosed():
 		socketconnect(str(time.time())+" up 1") #envoie un msg de up au socketserver
 		aiosend('Door4Status', "{} : closed".format(time.strftime("%c")))
 
+
+
 def aiosend(sendmsg,feed):
+	# la grosse lose
+	"""
+	envoie les releves a adafruit io
+	"""
+	# catch les exceptions
 	try:
 		aio.send(sendmsg,feed)
-	except errors.RequestError as e:
+	except Exception as e:
 		print e
 		pass
-	except:
-		raise
-
-
-
+		
 # mail
 # parmeters : mailmsg = le corps du mail
 # appelé par les différentes fct (lancement, ouverture, fermeture, longue ouverture)

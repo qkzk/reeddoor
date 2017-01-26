@@ -18,7 +18,7 @@ nano reeddoorlog/reeddoor.log
 
 ## installation et usage
 
-1. copier le script à la racine  
+1. copier le dossier dans `/home/pi`
 1. créer le crontab
 1. rebooter, checker les logs (voir plus haut)  
 1. renommer `token_example.py` en `token.py` et l'éditer  
