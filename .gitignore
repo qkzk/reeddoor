@@ -91,6 +91,7 @@ ENV/
 #Localfiles
 tokenss.py
 token.py
+*token*
 
 #backup
 #old
