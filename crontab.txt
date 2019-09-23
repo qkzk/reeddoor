@@ -1,1 +1,1 @@
-@reboot /usr/bin/python /home/pi/testreed.py >> /home/pi/reeddoorlog/reeddoor.pi.log 2>&1
+@reboot sleep 30 && /usr/bin/python3 reed_logguer_3_dev.py >> /home/pi/reeddoorlog/print.log 2>&1
