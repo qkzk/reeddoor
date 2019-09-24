@@ -96,6 +96,10 @@ def mail(mailmsg):
     Rédige et envoie un email via gmail.
     Log les erreurs
     TODO : pourquoi les caractères non ascii font planter ?
+    probleme avec le mimetype, faudrait préciser des trucs, j'ai pas tt compris
+    sources :
+    https://petermolnar.net/not-mime-email-python-3/
+    https://fr.wikipedia.org/wiki/Multipurpose_Internet_Mail_Extensions
     '''
     try:
         GMAIL_USERNAME = tokenss.GMAIL_USERNAME
@@ -176,6 +180,7 @@ def parse_args():
 ##############################################################################
 ################################### reed  ####################################
 ##############################################################################
+
 
 class Door():
     """gère les états de la porte."""
