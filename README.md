@@ -1,47 +1,32 @@
 # reeddoor
 
-script python qui envoie différents messages à chaque ouverture et fermeture d'une porte.
+Script python qui envoie différents messages à chaque ouverture et fermeture d'une porte.
 Elle est surveillée à l'aide d'un capteur reed
 
 ## maintenance
 
 EST CE QUE LE SCRIPT TOURNE ??
+
 ~~~sh
+$ ssh VOTREHOST
 $ ps -ef | grep python
 ~~~
 
 AFFICHER UN DES LOGS LOGS PYTHON :
+
 ~~~sh
+$ ssh VOTREHOST
 $ tail -s 0.1 -f /home/pi/reeddoorlog/unfichierlog.log
 ~~~
 
 
 ## installation et usage
 
-1. copier le dossier dans `/home/pi`
-1. créer le crontab
-1. rebooter, checker les logs (voir plus haut)
-1. renommer `token_example.py` en `tokenss.py` et l'éditer
-1. le script envoie un mail à l'adresse indiquée dans tokenss.py à chaque lancement
-1. il tente de se connecter à un server socket régulièrement pour indiquer son état
-1. il tente d'envoyer des msg à adafruit_IO
-1. il tente d'envoyer des mails à chaque ouverture
-
-
-CRONTAB
-
-~~~sh
-$ sudo crontab -e
-~~~
-Ajouter :
-~~~
-@reboot sleep 30 && /usr/bin/python3 reed_logguer_3_dev.py >> /home/pi/reeddoorlog/print.log 2>&1
-~~~
-LANCER MANUELLEMENT
-
-~~~sh
-$ sudo /usr/bin/python3 reed_logguer_3_dev.py >> /home/pi/reeddoorlog/print.log 2>&1
-~~~
+1. ssh sur le raspberry pi depuis le pc de déploiement
+2. créer les dossiers `/home/pi/reed` (script) et `/home/pi/reeddoorlog`
+3. Renommer `example_tokn.py` en `tokenss.py` et y éditer vos informations
+4. `$ chmod +x ./deploy.sh`
+5. Déployer avec `./deploy.sh`
 
 ---
 
@@ -69,28 +54,31 @@ GPIO :
 ## CHANGELOG
 
 1. test : juillet 2016
-1. mail et installation
-1. logs locaux
-1. upload status adafruit io
-1. plantage !!! DONE - sept 2016
-pb : connexion avec smtp plante : create_connexion
-socket.error: [Errno 101] Network is unreachable
-solution long terme : si le smtp plante, try execpt un error et pas planter !!!!!
-1. connexion via socket au rpi2 : octobre 2016
-envoi des msg : DONE
-refresh continu
-1. bugs
-1. bugs
-1. janvier 2017 : ajout d'autres feed aio pour clarifier le dashboard
-1. GITHUB first commit
-2. septembre 2019 : je remet le nez là dedans. Bcp de choses ont changé je vais sûrement tout réécrire.
-3. septembre 2019 : réécriture complète des fonctions en Python 3.4 (dernière version sur Debian Jessie).
+2. mail et installation
+3. logs locaux
+4. upload status adafruit io
+5. plantage !!! DONE - sept 2016
+
+  pb : connexion avec smtp plante : create_connexion
+  socket.error: [Errno 101] Network is unreachable
+  solution long terme : si le smtp plante, try execpt un error et pas planter !!!!!
+
+6. connexion via socket au rpi2 : octobre 2016
+    envoi des msg : DONE
+    refresh continu
+7. bugs
+8. bugs
+10. janvier 2017 : ajout d'autres feed aio pour clarifier le dashboard
+11. GITHUB first commit
+12. septembre 2019 : je remet le nez là dedans. Bcp de choses ont changé je vais sûrement tout réécrire.
+13. septembre 2019 : réécriture complète des fonctions en Python 3.4 (dernière version sur Debian Jessie).
 	* création d'une classe pour la porte,
 	* mesure des temps d'ouverture plus fidèle
 	* un seul principe pour les logs : rotating file handler
-	* possibilité d'un mode verbose si besoin de debuggé
+	* possibilité d'un mode verbose si besoin de deboguer
 
 	Reste à améliorer le principe des logs, trop de messages, en particulier mqtt... trouver un moyen d'alerter si le broker est down
+14. 2020/01/28 : nettoyage du code (en partie), création d'un script de déploiement.
 
 
 TODO
