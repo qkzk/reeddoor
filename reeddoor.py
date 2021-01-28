@@ -1,3 +1,7 @@
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+
+
 '''
 title: reed_logguer
 author: qkzk
@@ -15,7 +19,6 @@ enregistre les ouvertures et fermetures d'une porte via plusieurs média :
 '''
 
 # std library
-import datetime
 import logging
 import time
 import smtplib
@@ -30,12 +33,13 @@ import paho.mqtt.client as mqtt
 import tokenss
 
 # globals
-logfile_print = '/home/pi/reeddoorlog/print.log'
-logfile_ouvertures = '/home/pi/reeddoorlog/ouvertures.log'
-logfile_errors = "/home/pi/reeddoorlog/errors.log"
-logfile_status = '/home/pi/reeddoorlog/up.log'
+LOGFILE_PRINT = '/home/pi/reeddoorlog/print.log'
+LOGFILE_OUVERTURES = '/home/pi/reeddoorlog/ouvertures.log'
+LOGFILE_ERRORS = "/home/pi/reeddoorlog/reed_logguer_errors.log"
+LOGFILE_STATUS = '/home/pi/reeddoorlog/up.log'
 
-broker_address = "192.168.1.26"
+MQTT_BROKER_ADDRESS = "192.168.1.26"
+MQTT_TOPIC = "qdoor"
 
 
 ##############################################################################
@@ -51,7 +55,7 @@ def on_connect(client, userdata, flags, rc):
                                                                    rc,
                                                                    client)
     log_stdout.warning(msg)
-    if verbose:
+    if VERBOSE:
         print(msg)
 
 
@@ -61,7 +65,7 @@ def on_message(client, userdata, message):
     '''
     msg = "message received {}".format(str(message.payload.decode("utf-8")))
     log_stdout.warning(msg)
-    if verbose:
+    if VERBOSE:
         print(msg)
 
 
@@ -74,15 +78,16 @@ def send_mqtt(data_type, data):
         client = mqtt.Client("rpi1_qnas")  # create new instance
         client.on_connect = on_connect  # attach function to callback
         client.on_message = on_message  # attach function to callback
-        client.connect(broker_address)  # connect to broker
+        client.connect(MQTT_BROKER_ADDRESS)  # connect to broker
         client.loop_start()  # start the loop
-        client.publish("reeddoor/{}".format(data_type), data)  # sent the data
+        client.publish(MQTT_TOPIC + "/{}".format(data_type),
+                       data)  # sent the data
         client.disconnect()
         client.loop_stop()
     except Exception as e:
         msg = "{} \nMQTT error".format(time.strftime("%Y-%m-%d %H:%M:%S"))
         log_stdout.warning(msg)
-        if verbose:
+        if VERBOSE:
             print(msg)
         log_errors.warning(msg)
 
@@ -103,9 +108,6 @@ def mail(mailmsg):
     https://fr.wikipedia.org/wiki/Multipurpose_Internet_Mail_Extensions
     '''
     try:
-        GMAIL_USERNAME = tokenss.GMAIL_USERNAME
-        GMAIL_PASSWORD = tokenss.GMAIL_PASSWORD
-
         email_subject = "MSG d'alerte du Raspberry Pi : porte d'entree"
         recipient = tokenss.recipient
         now_string = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -114,9 +116,9 @@ def mail(mailmsg):
         session = smtplib.SMTP('smtp.gmail.com', 587)
         session.ehlo()
         session.starttls()
-        session.login(GMAIL_USERNAME, GMAIL_PASSWORD)
+        session.login(tokenss.GMAIL_USERNAME, tokenss.GMAIL_PASSWORD)
 
-        headers = "\r\n".join(["from: {}".format(GMAIL_USERNAME),
+        headers = "\r\n".join(["from: {}".format(tokenss.GMAIL_USERNAME),
                                "subject: {}".format(email_subject),
                                "to: {}".format(recipient),
                                "mime-version: 1.0",
@@ -125,11 +127,11 @@ def mail(mailmsg):
         # body_of_email can be plaintext or html!
         content = headers + "\r\n\r\n" + body_of_email
         # commande d'envoi du mail
-        session.sendmail(GMAIL_USERNAME, recipient, content)
+        session.sendmail(tokenss.GMAIL_USERNAME, recipient, content)
     except Exception as e:
         msg = "{} \nmail send error".format(time.strftime("%Y-%m-%d %H:%M:%S"))
         log_stdout.warning(msg)
-        if verbose:
+        if VERBOSE:
             print(msg)
         log_errors.warning(msg)
 
@@ -169,35 +171,12 @@ def parse_args():
     Si "verbose" dans l'argument console, affiche le texte
     Sinon on n'imprimera rien dans la console
     '''
-    argugments = sys.argv
-    verbose = False
     if len(sys.argv) >= 2 and sys.argv[1] in "VERBOSEverbose":
         print("verbose !")
-        verbose = True
+        return True
 
-    return verbose
+    return False
 
-
-def get_last_up():
-    try:
-        with open(logfile_status) as f:
-            last_line = f.readlines()[-1]
-        dt = datetime.datetime.strptime(last_line[:19], "%Y-%m-%d %H:%M:%S")
-        return dt
-    except FileNotFoundError as e:
-        print("Fichier up introuvable")
-    except (ValueError, IndexError) as e:
-        print("Impossible de convertir la date du fichier log...")
-
-
-def get_down_duration():
-    last_up_date = get_last_up()
-    if last_up_date:
-        launch_time = datetime.datetime.now()
-        delta = launch_time - last_up_date
-        # duration_down = round((delta).total_seconds())
-        # print(str(delta))
-        return str(delta)
 
 ##############################################################################
 ################################### reed  ####################################
@@ -228,7 +207,7 @@ class Door():
         duree = self.duree_ouverture()
         msg = 'door opened long time'
         log_stdout.warning(msg)
-        if verbose:
+        if VERBOSE:
             print(msg)
         send_mqtt("ouverture", 'long {}'.format(duree))
         mail('La porte est ouverte depuis {} secondes'.format(duree))
@@ -252,14 +231,13 @@ class Door():
             mail('ouverture porte !')
             msg = 'door opened NOW !'
             log_stdout.warning(msg)
-            if verbose:
+            if VERBOSE:
                 print(msg)
         else:
-            msg = 'door opened {} secs'.format(
-                self.duree_ouverture())
-            log_stdout.warning(msg)
-            if verbose:
-                print(msg)
+            log_stdout.warning('door opened %i secs', self.duree_ouverture())
+            if VERBOSE:
+                print('door opened {} secs'.format(
+                    self.duree_ouverture()))
         time.sleep(0.2)
         self.tick_ouverture += 1
         if self.tick_ouverture % 20 == 0:
@@ -292,49 +270,8 @@ class Door():
             send_mqtt("statusdoor", 1)
 
 
-if __name__ == '__main__':
-    ###########################################################################
-    ################################  setup    ################################
-    ###########################################################################
-
-    # CONFIGURATION
-    # verbose : affichage console, sinon seulement dans des fichiers log
-    verbose = parse_args()
-
-    down_duration = get_down_duration()
-
-    # GPIO Setup
-    GPIO.setmode(GPIO.BCM)
-    GPIO.setup(18, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
-    # Door instance pour gérer réactions aux capteurs
-    door = Door()
-
-    # logging avec rotating log limite a 5 mb
-    log_ouverture = setup_app_log(logfile_ouvertures)
-    log_errors = setup_app_log(logfile_errors)
-    log_uptime_door = setup_app_log(logfile_status)
-    log_stdout = setup_app_log(logfile_print)
-
-    # lancement du script
-    time.sleep(5)  # pour que la connexion wifi soit établie
-    log_ouverture.warning('%s', 'Lancement du script ReedDoor')
-    log_stdout.warning("Lancement du script reed door")
-    if verbose:
-        print("Lancement du script reed door")
-    send_mqtt("ouverture", 'lancement')
-
-    # enregistrement de la durée de down
-    if down_duration:
-        down_msg = 'ReedDoor down pendant : {}'.format(down_duration)
-        log_ouverture.warning("%s", down_msg)
-        log_stdout.warning(down_msg)
-        send_mqtt('ouverture', 'down durant {}'.format(down_duration))
-        mail('Lancement du script ReedDoor. ' + down_msg)
-        if verbose:
-            print(down_msg)
-    else:
-        mail('Lancement du script ReedDoor')
+def main():
+    '''main function'''
 
     ############################################################################
     #############################   GPIO while loop  ###########################
@@ -347,3 +284,36 @@ if __name__ == '__main__':
             door.door_closed()
         else:
             door.door_opened()
+
+
+if __name__ == '__main__':
+    ###########################################################################
+    ################################  setup    ################################
+    ###########################################################################
+
+    # CONFIGURATION
+    # verbose : affichage console, sinon seulement dans des fichiers log
+    VERBOSE = parse_args()
+
+    # GPIO Setup
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(18, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
+    # Door instance pour gérer réactions aux capteurs
+    door = Door()
+
+    # logging avec rotating log limite a 5 mb
+    log_ouverture = setup_app_log(LOGFILE_OUVERTURES)
+    log_errors = setup_app_log(LOGFILE_ERRORS)
+    log_uptime_door = setup_app_log(LOGFILE_STATUS)
+    log_stdout = setup_app_log(LOGFILE_PRINT)
+
+    # lancement du script
+    time.sleep(5)  # pour que la connexion wifi soit établie
+    log_ouverture.warning('%s', 'Lancement du script ReedDoor')
+    log_stdout.warning("Lancement du script reed door")
+    if VERBOSE:
+        print("Lancement du script reed door")
+    send_mqtt("ouverture", 'lancement')
+    mail('Lancement du script ReedDoor')
+    main()

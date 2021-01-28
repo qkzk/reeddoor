@@ -1,1 +1,0 @@
-@reboot sleep 30 && /usr/bin/python3 reed_logguer_3_dev.py >> /home/pi/reeddoorlog/print.log 2>&1
