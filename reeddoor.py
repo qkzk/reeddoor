@@ -1,8 +1,7 @@
 #!/usr/bin/python3
-# -*- coding: utf-8 -*-
 
 
-'''
+"""
 title: reed_logguer
 author: qkzk
 
@@ -16,304 +15,285 @@ enregistre les ouvertures et fermetures d'une porte via plusieurs média :
 * on enregistre aussi les durées d'ouverture de la porte (simple compteur)
     Quand la porte reste ouverte longtemps on envoit bcp de messages, ce n'est
     pas normal
-'''
+"""
 
-# std library
 import logging
 import time
 import smtplib
 import sys
+from logging import Logger
 from logging.handlers import RotatingFileHandler
 
-# community
 import RPi.GPIO as GPIO
 import paho.mqtt.client as mqtt
 
-# self
 import tokenss
 
-# globals
-LOGFILE_PRINT = '/home/pi/reeddoorlog/print.log'
-LOGFILE_OUVERTURES = '/home/pi/reeddoorlog/ouvertures.log'
+LOGFILE_PRINT = "/home/pi/reeddoorlog/print.log"
+LOGFILE_OPENINGS = "/home/pi/reeddoorlog/ouvertures.log"
 LOGFILE_ERRORS = "/home/pi/reeddoorlog/reed_logguer_errors.log"
-LOGFILE_STATUS = '/home/pi/reeddoorlog/up.log'
+LOGFILE_STATUS = "/home/pi/reeddoorlog/up.log"
 
 MQTT_BROKER_ADDRESS = "192.168.1.26"
 MQTT_TOPIC = "qdoor"
 
+GPIO_PIN = 18
 
-##############################################################################
-################################### mqtt #####################################
-##############################################################################
+door_status = int
+DOOR_IS_OPENED = 1
+DOOR_IS_CLOSED = 0
 
-
-def on_connect(client, userdata, flags, rc):
-    '''
-    On log les connexions à mqtt
-    '''
-    msg = "Connected flags {} result code {} client1_id {}".format(flags,
-                                                                   rc,
-                                                                   client)
-    log_stdout.warning(msg)
-    if VERBOSE:
-        print(msg)
+TICK_TIME = 0.2  # second
 
 
-def on_message(client, userdata, message):
-    '''
-    On log les messages reçus par mqtt
-    '''
-    msg = "message received {}".format(str(message.payload.decode("utf-8")))
-    log_stdout.warning(msg)
-    if VERBOSE:
-        print(msg)
-
-
-def send_mqtt(data_type, data):
-    '''
-    Envoie un message au broker du raspberry via mqtt
-    Log les erreurs eventuelles
-    '''
-    try:
-        client = mqtt.Client("rpi1_qnas")  # create new instance
-        client.on_connect = on_connect  # attach function to callback
-        client.on_message = on_message  # attach function to callback
-        client.connect(MQTT_BROKER_ADDRESS)  # connect to broker
-        client.loop_start()  # start the loop
-        client.publish(MQTT_TOPIC + "/{}".format(data_type),
-                       data)  # sent the data
-        client.disconnect()
-        client.loop_stop()
-    except Exception as e:
-        msg = "{} \nMQTT error".format(time.strftime("%Y-%m-%d %H:%M:%S"))
-        log_stdout.warning(msg)
-        if VERBOSE:
-            print(msg)
-        log_errors.warning(msg)
-
-
-##############################################################################
-################################### mail #####################################
-##############################################################################
-
-
-def mail(mailmsg):
-    '''
-    Rédige et envoie un email via gmail.
-    Log les erreurs
-    TODO : pourquoi les caractères non ascii font planter ?
-    probleme avec le mimetype, faudrait préciser des trucs, j'ai pas tt compris
-    sources :
-    https://petermolnar.net/not-mime-email-python-3/
-    https://fr.wikipedia.org/wiki/Multipurpose_Internet_Mail_Extensions
-    '''
-    try:
-        email_subject = "MSG d'alerte du Raspberry Pi : porte d'entree"
-        recipient = tokenss.recipient
-        now_string = time.strftime("%Y-%m-%d %H:%M:%S")
-        body_of_email = "{} \n{}".format(now_string, mailmsg)
-
-        session = smtplib.SMTP('smtp.gmail.com', 587)
-        session.ehlo()
-        session.starttls()
-        session.login(tokenss.GMAIL_USERNAME, tokenss.GMAIL_PASSWORD)
-
-        headers = "\r\n".join(["from: {}".format(tokenss.GMAIL_USERNAME),
-                               "subject: {}".format(email_subject),
-                               "to: {}".format(recipient),
-                               "mime-version: 1.0",
-                               "content-type: text/html"])
-
-        # body_of_email can be plaintext or html!
-        content = headers + "\r\n\r\n" + body_of_email
-        # commande d'envoi du mail
-        session.sendmail(tokenss.GMAIL_USERNAME, recipient, content)
-    except Exception as e:
-        msg = "{} \nmail send error".format(time.strftime("%Y-%m-%d %H:%M:%S"))
-        log_stdout.warning(msg)
-        if VERBOSE:
-            print(msg)
-        log_errors.warning(msg)
-
-
-##############################################################################
-################################### logs #####################################
-##############################################################################
-
-
-def setup_app_log(logfile):
-    '''
-    Crée un logguer avec rotation des fichiers logs
-    Le nom du logguer est le nom du fichier dans lequel il enregistre.
-    On loggue bcp (c'est le but de ce script... donc il faut plusieurs logguers)
-    '''
-    logname = logfile.split("/")[-1]
-    log_formatter = logging.Formatter(
-        '%(asctime)s %(levelname)s %(funcName)s(%(lineno)d) %(message)s')
-    my_handler = RotatingFileHandler(logfile, mode='a',
-                                     maxBytes=5*1024*1024, backupCount=2,
-                                     encoding=None, delay=0)
-    my_handler.setFormatter(log_formatter)
-    my_handler.setLevel(logging.INFO)
-
-    # app_log = logging.getLogger('root')
-    app_log = logging.getLogger(logname)
-    app_log.setLevel(logging.INFO)
-    app_log.addHandler(my_handler)
-
-    return app_log
-
-
-def parse_args():
-    '''
+def parse_args() -> bool:
+    """
     Récupère et interprète les arguments passés lors de l'appel.
     Si on repère une des lettres de verbose, le mode est activé.
     Si "verbose" dans l'argument console, affiche le texte
     Sinon on n'imprimera rien dans la console
-    '''
-    if len(sys.argv) >= 2 and sys.argv[1] in "VERBOSEverbose":
-        print("verbose !")
-        return True
-
-    return False
+    """
+    return len(sys.argv) > 1 and sys.argv[1] in "VERBOSEverbose"
 
 
-##############################################################################
-################################### reed  ####################################
-##############################################################################
+def setup_app_log(logfile: str) -> Logger:
+    """
+    Crée un logguer avec rotation des fichiers logs
+    Le nom du logguer est le nom du fichier dans lequel il enregistre.
+    On loggue bcp (c'est le but de ce script... donc il faut plusieurs logguers)
+    """
+    logname = logfile.split("/")[-1]
+    log_formatter = logging.Formatter(
+        "%(asctime)s %(levelname)s %(funcName)s(%(lineno)d) %(message)s"
+    )
+    handler = RotatingFileHandler(
+        logfile,
+        mode="a",
+        maxBytes=5 * 1024 * 1024,
+        backupCount=2,
+        encoding=None,
+        delay=False,
+    )
+    handler.setFormatter(log_formatter)
+    handler.setLevel(logging.INFO)
+
+    app_log = logging.getLogger(logname)
+    app_log.setLevel(logging.INFO)
+    app_log.addHandler(handler)
+
+    return app_log
 
 
-class Door():
-    """gère les états de la porte."""
+class Announcer:
+    loggers: dict = {
+        "log_opening": setup_app_log(LOGFILE_OPENINGS),
+        "log_errors": setup_app_log(LOGFILE_ERRORS),
+        "log_uptime_door": setup_app_log(LOGFILE_STATUS),
+        "log_stdout": setup_app_log(LOGFILE_PRINT),
+    }
 
-    def __init__(self):
-        self.tick_ouverture = 0
-        self.tick_fermeture = 0
-        self.door_status = 1
-        self.last_opened = None
-        self.last_closed = None
+    def __init__(self, verbose: bool):
+        self.verbose = print if verbose else lambda _: None
 
-    def duree_ouverture(self):
-        '''
-        Calcule et arrondit une durée d'ouverture en seconde.
-        '''
-        return round(time.time() - self.last_opened)
+    def send_mqtt(self, data_type, data):
+        """
+        Envoie un message au broker du raspberry via mqtt
+        Log les erreurs eventuelles
+        """
+        try:
+            client = mqtt.Client("rpi1_qnas")
+            client.on_connect = self.on_connect
+            client.on_message = self.on_message
+            client.connect(MQTT_BROKER_ADDRESS)
+            client.loop_start()
+            client.publish(MQTT_TOPIC + "/{}".format(data_type), data)
+            client.disconnect()
+            client.loop_stop()
+        except Exception:
+            msg = "{} \nMQTT error".format(time.strftime("%Y-%m-%d %H:%M:%S"))
+            self.loggers["log_stdout"].warning(msg)
+            self.loggers["log_errors"].warning(msg)
+            self.verbose(msg)
 
-    def long_open(self):
-        '''
-        Exécutée quand la porte reste longtemps ouverte.
-        Log les états partout et envoie un mail.
-        '''
-        duree = self.duree_ouverture()
-        msg = 'door opened long time'
-        log_stdout.warning(msg)
-        if VERBOSE:
-            print(msg)
-        send_mqtt("ouverture", 'long {}'.format(duree))
-        mail('La porte est ouverte depuis {} secondes'.format(duree))
+    def on_connect(self, client, userdata, flags, rc):
+        """
+        On log les connexions à mqtt
+        """
+        msg = "Connected flags {} result code {} client1_id {}".format(
+            flags, rc, client
+        )
+        self.loggers["log_stdout"].warning(msg)
+        self.verbose(msg)
+
+    def on_message(self, client, userdata, message):
+        """
+        On log les messages reçus par mqtt
+        """
+        msg = "message received {}".format(str(message.payload.decode("utf-8")))
+        self.loggers["log_stdout"].warning(msg)
+        self.verbose(msg)
+
+    def mail(self, mailmsg):
+        """
+        Rédige et envoie un email via gmail.
+        Log les erreurs
+        TODO : pourquoi les caractères non ascii font planter ?
+        probleme avec le mimetype, faudrait préciser des trucs, j'ai pas tt compris
+        sources :
+        https://petermolnar.net/not-mime-email-python-3/
+        https://fr.wikipedia.org/wiki/Multipurpose_Internet_Mail_Extensions
+        """
+        try:
+            email_subject = "MSG d'alerte du Raspberry Pi : porte d'entree"
+            recipient = tokenss.recipient
+            now_string = time.strftime("%Y-%m-%d %H:%M:%S")
+            body_of_email = "{} \n{}".format(now_string, mailmsg)
+
+            session = smtplib.SMTP("smtp.gmail.com", 587)
+            session.ehlo()
+            session.starttls()
+            session.login(tokenss.GMAIL_USERNAME, tokenss.GMAIL_PASSWORD)
+
+            headers = "\r\n".join(
+                [
+                    "from: {}".format(tokenss.GMAIL_USERNAME),
+                    "subject: {}".format(email_subject),
+                    "to: {}".format(recipient),
+                    "mime-version: 1.0",
+                    "content-type: text/html",
+                ]
+            )
+
+            content = headers + "\r\n\r\n" + body_of_email
+            session.sendmail(tokenss.GMAIL_USERNAME, recipient, content)
+
+        except Exception:
+            msg = "{} \nmail send error".format(time.strftime("%Y-%m-%d %H:%M:%S"))
+            self.loggers["log_stdout"].warning(msg)
+            self.loggers["log_errors"].warning(msg)
+            self.verbose(msg)
+
+    def announce_itself(self):
+        self.verbose("starting...")
+        msg = "Lancement du script reed door"
+        time.sleep(5)
+        self.loggers["log_opening"].warning("%s", msg)
+        self.loggers["log_stdout"].warning(msg)
+        self.send_mqtt("ouverture", "lancement")
+        self.mail(msg)
+        self.verbose(msg)
+
+    def long_open(self, duration: int):
+        msg = "door opened long time"
+        self.loggers["log_stdout"].warning(msg)
+        self.loggers["log_uptime_door"].warning("0")
+        self.send_mqtt("ouverture", "long {}".format(duration))
+        self.send_mqtt("status", DOOR_IS_OPENED)
+        self.mail("La porte est ouverte depuis {} secondes".format(duration))
+        self.verbose(msg)
+
+    def door_stayed_opened(self, duration: int):
+        msg = "La porte est restee ouverte {} secondes".format(duration)
+        self.loggers["log_opening"].warning("%s", msg)
+        self.loggers["log_stdout"].warning(msg)
+        mqtt_msg = "closed {}".format(duration)
+        self.send_mqtt("ouverture", mqtt_msg)
+        self.mail(msg)
+        self.verbose(msg)
+
+    def update_status(self, status: door_status):
+        self.loggers["log_uptime_door"].warning(str(status))
+        self.send_mqtt("statusdoor", status)
 
     def door_opened(self):
-        '''
+        msg = "door opened NOW !"
+        self.loggers["log_opening"].warning("%s", "Ouverture porte")
+        self.loggers["log_stdout"].warning(msg)
+        self.send_mqtt("ouverture", "open")
+        self.send_mqtt("statusdoor", DOOR_IS_OPENED)
+        self.mail("ouverture porte !")
+        self.verbose(msg)
+
+    def door_still_opened(self, duration: int):
+        self.loggers["log_stdout"].warning("door opened %i secs", duration)
+        self.verbose("door opened {} secs".format(duration))
+
+
+class Door:
+    """gère les états de la porte."""
+
+    def __init__(self, exporter: Announcer):
+        self.exporter = exporter
+
+        self.tick_open = 0
+        self.tick_close = 0
+        self.door_status = DOOR_IS_CLOSED
+        self.last_opened = 0
+        self.last_closed = 0
+
+    def opening_duration(self):
+        """
+        Calcule et arrondit une durée d'ouverture en seconde.
+        """
+        return round(time.time() - self.last_opened)
+
+    def is_opened(self):
+        """
         Appelé quand le capteur détecte que la porte est fermée.
         Compte depuis combien de temps et si on dépasse le seuil envoie des
         mails.
         Log tout ce qu'il peut, c'est le statut critique.
-        '''
-        self.door_status = 0  # porte ouverte
-        self.tick_fermeture = 0  # reset la durée de fermeture
+        """
+        self.door_status = DOOR_IS_OPENED
+        self.tick_close = 0
 
-        if self.tick_ouverture == 0:
-            # Envoie la valeur 0 au feed nommé 'Door'
+        if self.tick_open == 0:
             self.last_opened = time.time()
-            log_ouverture.warning('%s', 'Ouverture porte')
-            send_mqtt("ouverture", 'open')
-            send_mqtt("statusdoor", 0)
-            mail('ouverture porte !')
-            msg = 'door opened NOW !'
-            log_stdout.warning(msg)
-            if VERBOSE:
-                print(msg)
+            self.exporter.door_opened()
         else:
-            log_stdout.warning('door opened %i secs', self.duree_ouverture())
-            if VERBOSE:
-                print('door opened {} secs'.format(
-                    self.duree_ouverture()))
-        time.sleep(0.2)
-        self.tick_ouverture += 1
-        if self.tick_ouverture % 20 == 0:
-            # temps d'alerte x5 secondes
-            self.long_open()
-            log_uptime_door.warning('0')
-            send_mqtt("status", 0)
+            self.exporter.door_still_opened(self.opening_duration())
+        time.sleep(TICK_TIME)
+        self.tick_open += 1
+        if self.tick_open % 20 == 0:
+            self.exporter.long_open(self.opening_duration())
 
-    def door_closed(self):
-        '''
+    def is_closed(self):
+        """
         Appelé quand la porte est fermée.
         Log les états et publie dans le fichier dédié à ce tracking
-        '''
-        if self.door_status == 0:
-            log_msg = 'La porte est restee ouverte {} secondes'.format(
-                self.duree_ouverture())
-            mqtt_msg = 'closed {}'.format(self.duree_ouverture())
+        """
+        if self.door_status == DOOR_IS_OPENED:
+            self.exporter.door_stayed_opened(self.opening_duration())
 
-            send_mqtt("ouverture", mqtt_msg)
-            log_ouverture.warning('%s', log_msg)
-            log_stdout.warning(log_msg)
-            mail(log_msg)
+        self.door_status = DOOR_IS_CLOSED  # porte fermee
+        self.tick_open = 0
+        time.sleep(TICK_TIME)
+        self.tick_close += 1
+        if self.tick_close % 40 == 0:  # fermee depuis 5s
+            self.exporter.update_status(DOOR_IS_CLOSED)
 
-        self.door_status = 1  # porte fermee
-        self.tick_ouverture = 0
-        time.sleep(0.2)
-        self.tick_fermeture += 1
-        if self.tick_fermeture % 40 == 0:  # fermee depuis 5s
-            log_uptime_door.warning('1')
-            send_mqtt("statusdoor", 1)
+
+def gpio_input(door: Door):
+    """read status and alert"""
+    input_state = GPIO.input(GPIO_PIN)
+    if input_state:
+        door.is_closed()
+    else:
+        door.is_opened()
 
 
 def main():
-    '''main function'''
-
-    ############################################################################
-    #############################   GPIO while loop  ###########################
-    ############################################################################
-
-    while True:
-        # on lit l'état du capteur
-        input_state = GPIO.input(18)
-        if input_state:
-            door.door_closed()
-        else:
-            door.door_opened()
-
-
-if __name__ == '__main__':
-    ###########################################################################
-    ################################  setup    ################################
-    ###########################################################################
-
-    # CONFIGURATION
-    # verbose : affichage console, sinon seulement dans des fichiers log
-    VERBOSE = parse_args()
-
-    # GPIO Setup
     GPIO.setmode(GPIO.BCM)
-    GPIO.setup(18, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+    GPIO.setup(GPIO_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
-    # Door instance pour gérer réactions aux capteurs
-    door = Door()
+    verbose = parse_args()
+    announcer = Announcer(verbose)
+    door = Door(announcer)
 
-    # logging avec rotating log limite a 5 mb
-    log_ouverture = setup_app_log(LOGFILE_OUVERTURES)
-    log_errors = setup_app_log(LOGFILE_ERRORS)
-    log_uptime_door = setup_app_log(LOGFILE_STATUS)
-    log_stdout = setup_app_log(LOGFILE_PRINT)
+    announcer.announce_itself()
+    while True:
+        gpio_input(door)
 
-    # lancement du script
-    time.sleep(5)  # pour que la connexion wifi soit établie
-    log_ouverture.warning('%s', 'Lancement du script ReedDoor')
-    log_stdout.warning("Lancement du script reed door")
-    if VERBOSE:
-        print("Lancement du script reed door")
-    send_mqtt("ouverture", 'lancement')
-    mail('Lancement du script ReedDoor')
+
+if __name__ == "__main__":
     main()
