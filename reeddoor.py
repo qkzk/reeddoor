@@ -85,7 +85,7 @@ def setup_app_log(logfile: str) -> Logger:
 
 
 class Announcer:
-    loggers: dict[str, Logger] = {
+    loggers: dict = {
         "log_opening": setup_app_log(LOGFILE_OPENINGS),
         "log_errors": setup_app_log(LOGFILE_ERRORS),
         "log_uptime_door": setup_app_log(LOGFILE_STATUS),
