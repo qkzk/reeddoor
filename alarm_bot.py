@@ -65,9 +65,10 @@ class DoorWatcher:
     """Record the last status of the door, run the alarm"""
 
     def __init__(self):
-        self.started_time = datetime.datetime.now()
+        self._started_time = datetime.datetime.now()
         self._last_status = self.__read_last_line()
         self._last_edit = self.__get_modification_time()
+        self._last_lines = self.__read_last_lines()
         self._verbose = False
         self._running = False
 
@@ -109,7 +110,7 @@ class DoorWatcher:
             last_line = f.readlines()[-1]
         return DoorStatus.from_line(last_line)
 
-    def _read_last_lines(self) -> str:
+    def __read_last_lines(self) -> str:
         """
         Returns string of DoorStatus instances from the last lines of the logs.
         """
@@ -125,6 +126,7 @@ class DoorWatcher:
         if self._last_edit != last_edit:
             self._last_edit = last_edit
             self._last_status = self.__read_last_line()
+            self._last_lines = self.__read_last_lines()
             return True
         return False
 
@@ -133,6 +135,13 @@ class DoorWatcher:
         """Get the last edition of the logfile"""
         last_edit = os.stat(LOGFILE_OPENINGS).st_mtime
         return last_edit
+
+    def set_verbose(self, context):
+        """Set the verbose flag from given context args"""
+        self.verbose = False
+        if context.args:
+            if context.args[0] in "verboseVERBOSE":
+                self.verbose = True
 
     async def send_alarm(self, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Send the alarm message"""
@@ -154,7 +163,7 @@ class DoorWatcher:
         if self.am_i_sender(update):
             self.__update_status()
             await context.bot.send_message(
-                chat_id=update.effective_chat.id, text=self._read_last_lines()
+                chat_id=update.effective_chat.id, text=self._last_lines
             )
 
     async def last(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -172,13 +181,6 @@ class DoorWatcher:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id, text=f"The alarm is {msg}"
             )
-
-    def set_verbose(self, context):
-        """Set the verbose flag from given context args"""
-        self.verbose = False
-        if context.args:
-            if context.args[0] in "verboseVERBOSE":
-                self.verbose = True
 
     async def alarm(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Set the alarm, verbose or not"""
@@ -216,7 +218,7 @@ class DoorWatcher:
         if self.am_i_sender(update):
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text=HELP_MESSAGE.format(self.started_time),
+                text=HELP_MESSAGE.format(self._started_time),
             )
 
 
