@@ -4,11 +4,13 @@ author: qkzk
 date: 2022/06/11
 
 Telegram bot alerting me of openings and closing of my door.
-Recognize a few commands to help me monitoor Qdoor.
+Recognize a few commands to help me monitor Qdoor.
 """
 import logging
 import datetime
 import os
+from functools import wraps
+from typing import Callable
 
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import (
@@ -38,7 +40,7 @@ logging.basicConfig(
 )
 
 
-class DoorStatus:
+class LogLine:
     """Holds a door status read of opening logfile"""
 
     def __init__(self, dt: datetime.datetime, level: str, caller: str, msg: str):
@@ -61,24 +63,99 @@ class DoorStatus:
         return f"{self.datetime}\n      🦕  {self.msg}"
 
 
-class DoorWatcher:
-    """Record the last status of the door, run the alarm"""
+class DoorStatus:
+    """
+    Holds the status of the door, read from the logfile.
+    """
 
     def __init__(self):
-        self._started_time = datetime.datetime.now()
-        self._last_status = self.__read_last_line()
-        self._last_edit = self.__get_modification_time()
+        self._last_edit = self.__get_modification_time(LOGFILE_OPENINGS)
+        self._last_line = self.__read_last_line()
         self._last_lines = self.__read_last_lines()
-        self._verbose = False
-        self._running = False
+
+    def __read_last_line(self) -> str:
+        """
+        Returns a DoorStatus instance from the last line of logs.
+        """
+        with open(LOGFILE_OPENINGS, "r", encoding="utf-8") as f:
+            last_line = f.readlines()[-1]
+        return repr(LogLine.from_line(last_line))
+
+    def __read_last_lines(self) -> str:
+        """
+        Returns a string of DoorStatus instances from the last 10 lines of logs.
+        """
+        with open(LOGFILE_OPENINGS, "r", encoding="utf-8") as f:
+            last_lines = f.readlines()[-10:]
+        return " 🌸 " + "\n🌸 ".join(
+            map(lambda l: repr(LogLine.from_line(l)), last_lines)
+        )
 
     @staticmethod
-    def am_i_sender(update) -> bool:
+    def __get_modification_time(filename: str) -> float:
+        """Get the last edition of the file"""
+        return os.stat(filename).st_mtime
+
+    def update_status(self) -> bool:
+        """Update the status of the watched door. Returns True if it was modified."""
+        last_edit = self.__get_modification_time(LOGFILE_OPENINGS)
+        if self._last_edit != last_edit:
+            self._last_edit = last_edit
+            self._last_line = self.__read_last_line()
+            self._last_lines = self.__read_last_lines()
+            return True
+        return False
+
+    @property
+    def last_edit(self) -> datetime.datetime:
+        """Returns the last edition time of the logfile."""
+        self.update_status()
+        return datetime.datetime.fromtimestamp(self._last_edit)
+
+    @property
+    def last_line(self) -> str:
+        """Returns the last 10 lines of the log file, formatted."""
+        self.update_status()
+        return self._last_line
+
+    @property
+    def last_lines(self) -> str:
+        """Returns the last line of the log file, formatted."""
+        self.update_status()
+        return self._last_lines
+
+
+class TalkingDoor:
+    """Run the alarm and responds to Telegram commands."""
+
+    def __init__(self):
+        self.door_status = DoorStatus()
+        self._verbose = False
+        self._running = False
+        self._started_time = datetime.datetime.now()
+
+    def talk_to_me(callback_method: Callable) -> Callable:
         """
-        True iff I'm the sender of this message.
-        Prevents the bot to answer anyone else.
+        Decorator preventing other Telegram users from talking to the bot.
+        Intercept callbacks and prevent them to respond to anyone but me.
+
+        `args` should contain :
+        * `self` (DoorWatcher)
+        * `update` (telegram._update.update): Updater
+        * `context`
+        * other arguments may be...
+
+        We only care about `update` since it knows who sent the message.
+        If `update.effectif_user.id` isn't mine, returns.
         """
-        return update.effective_user.id == QKZKID
+
+        @wraps(callback_method)
+        async def wrapped(*args):
+            if len(args) < 1 or args[1].effective_user.id != QKZKID:
+                return
+            return await callback_method(*args)
+
+        return wrapped
 
     def __arm(self):
         """Set the alarm running flag to True"""
@@ -89,137 +166,92 @@ class DoorWatcher:
         self._running = False
 
     @property
-    def verbose(self) -> bool:
+    def __verbose(self) -> bool:
         return self._verbose
 
-    @verbose.setter
-    def verbose(self, verbose: bool):
+    @__verbose.setter
+    def __verbose(self, verbose: bool):
         self._verbose = verbose
 
-    @property
-    def last_edit(self) -> datetime.datetime:
-        """Returns the last edition time of the logfile."""
-        self.__update_status()
-        return datetime.datetime.fromtimestamp(self._last_edit)
+    def __read_verbose_param(self, context):
+        """Set the verbose flag from given context args"""
+        self.__verbose = False
+        if context.args and context.args[0] in "verboseVERBOSE":
+            self.__verbose = True
 
-    def __read_last_line(self) -> DoorStatus:
-        """
-        Returns a DoorStatus instance from the last line of the logs.
-        """
-        with open(LOGFILE_OPENINGS, "r", encoding="utf-8") as f:
-            last_line = f.readlines()[-1]
-        return DoorStatus.from_line(last_line)
+    async def __send_alarm(self, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Send the alarm message"""
+        if self.door_status.update_status():
+            await context.bot.send_message(
+                context.job.chat_id,
+                text=f"🐙{self.door_status.last_line}",
+            )
+        elif self.__verbose:
+            await context.bot.send_message(
+                context.job.chat_id,
+                text=f"🚀unedited - {self.door_status.last_edit}.",
+            )
 
-    def __read_last_lines(self) -> str:
+    @talk_to_me
+    async def last_lines(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
+        """Repond with the last lines of the log."""
+        self.door_status.update_status()
+        await update.message.reply_text(text=self.door_status.last_lines)
+
+    @talk_to_me
+    async def last(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
+        """Respond with last known status"""
+        self.door_status.update_status()
+        await update.message.reply_text(text=f"🐤 {self.door_status.last_line}")
+
+    @talk_to_me
+    async def status(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
+        """Respond with the status (running / stopped) of the alarm"""
+        msg = "running ✅" if self._running else "stopped 🚫"
+        await update.message.reply_text(text=f"The alarm is {msg}")
+
+    @talk_to_me
+    async def alarm(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """
-        Returns string of DoorStatus instances from the last lines of the logs.
+        Sets the alarm, verbose or not. Send confirmation.
+
+        Removes all scheduled jobs.
+        Set a scheduled job every `due` seconds.
+
+        If "verbose" is present in the command, it will spam the user
+        with debugging info every time.
+        Else, it will only send messages when the log is changed.
+
         """
-        with open(LOGFILE_OPENINGS, "r", encoding="utf-8") as f:
-            last_lines = f.readlines()[-10:]
-        return " 🌸 " + "\n🌸 ".join(
-            map(lambda l: repr(DoorStatus.from_line(l)), last_lines)
+        self.__read_verbose_param(context)
+        chat_id = update.effective_message.chat_id
+        job_removed = remove_job_if_exists(str(chat_id), context)
+        due = 1.0
+        context.job_queue.run_repeating(
+            self.__send_alarm, due, chat_id=chat_id, name=str(chat_id), data=due
         )
 
-    def __update_status(self) -> bool:
-        """Update the status of the watched door. Returns True if it was modified."""
-        last_edit = self.__get_modification_time()
-        if self._last_edit != last_edit:
-            self._last_edit = last_edit
-            self._last_status = self.__read_last_line()
-            self._last_lines = self.__read_last_lines()
-            return True
-        return False
+        self.__arm()
+        msg = "Alarm set!  ✅"
+        if job_removed:
+            msg += " Old one was removed."
+        await update.message.reply_text(msg)
 
-    @staticmethod
-    def __get_modification_time() -> float:
-        """Get the last edition of the logfile"""
-        last_edit = os.stat(LOGFILE_OPENINGS).st_mtime
-        return last_edit
-
-    def set_verbose(self, context):
-        """Set the verbose flag from given context args"""
-        self.verbose = False
-        if context.args:
-            if context.args[0] in "verboseVERBOSE":
-                self.verbose = True
-
-    async def send_alarm(self, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Send the alarm message"""
-        job = context.job
-        if self.__update_status():
-            await context.bot.send_message(
-                job.chat_id,
-                text=f"Last line: {self._last_status}",
-            )
-        elif self.verbose:
-            await context.bot.send_message(
-                job.chat_id,
-                text=f"No edition since {self.last_edit}.",
-            )
-
-    async def last_lines(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
-        if self.am_i_sender(update):
-            self.__update_status()
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id, text=self._last_lines
-            )
-
-    async def last(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Respond with last known status"""
-        if self.am_i_sender(update):
-            self.__update_status()
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id, text="🐤 " + repr(self._last_status)
-            )
-
-    async def status(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Respond with the status (running / stopped) of the alarm"""
-        if self.am_i_sender(update):
-            msg = "running ✅" if self._running else "stopped 🚫"
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id, text=f"The alarm is {msg}"
-            )
-
-    async def alarm(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Set the alarm, verbose or not"""
-        if self.am_i_sender(update):
-            chat_id = update.effective_message.chat_id
-            self.set_verbose(context)
-
-            due = 1.0
-            job_removed = remove_job_if_exists(str(chat_id), context)
-            context.job_queue.run_repeating(
-                self.send_alarm, due, chat_id=chat_id, name=str(chat_id), data=due
-            )
-
-            self.__arm()
-            text = "Alarm successfully set!  ✅"
-            if job_removed:
-                text += " Old one was removed."
-            await update.effective_message.reply_text(text)
-
+    @talk_to_me
     async def stop(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Stop the alarm."""
-        if self.am_i_sender(update):
-            self.__disarm()
-            chat_id = update.message.chat_id
-            job_removed = remove_job_if_exists(str(chat_id), context)
-            text = (
-                "Alarm successfully stopped.  🚫"
-                if job_removed
-                else "Alarm isn't running."
-            )
-            await update.message.reply_text(text)
+        """Stops the alarm and sends confirmation."""
+        self.__disarm()
+        chat_id = update.message.chat_id
+        job_removed = remove_job_if_exists(str(chat_id), context)
+        msg = "Alarm stopped 🚫" if job_removed else "Alarm isn't running 🚫"
+        await update.message.reply_text(msg)
 
-    async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Display the help message"""
-        if self.am_i_sender(update):
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=HELP_MESSAGE.format(self._started_time),
-            )
+    @talk_to_me
+    async def help(self, update: Update, _: ContextTypes.DEFAULT_TYPE):
+        """Sends the help message"""
+        await update.message.reply_text(
+            text=HELP_MESSAGE.format(self._started_time),
+        )
 
 
 async def send_keyboard(application: Application):
@@ -248,7 +280,7 @@ async def send_keyboard(application: Application):
 
 
 def remove_job_if_exists(name: str, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Remove job with given name. Returns whether job was removed."""
+    """Removes job with given name. Returns whether job was removed."""
     current_jobs = context.job_queue.get_jobs_by_name(name)
     if not current_jobs:
         return False
@@ -259,22 +291,26 @@ def remove_job_if_exists(name: str, context: ContextTypes.DEFAULT_TYPE) -> bool:
 
 def main():
     """
-    Run the bot.
-    Instanciate a DoorWatcher instance.
-    Instanciate a bot with custom commands reading the logs.
-    Display a keyboard and send me a message.
+    Runs the bot.
+    Instanciates a DoorWatcher instance.
+    Instanciates a bot with custom commands reading the logs.
+    Displays a keyboard and send me a message.
     Run the polling loop.
     """
-    door = DoorWatcher()
+    door = TalkingDoor()
 
     application = ApplicationBuilder().token(TOKEN).build()
 
-    application.add_handler(CommandHandler(["start", "help"], door.help))
-    application.add_handler(CommandHandler("alarm", door.alarm))
-    application.add_handler(CommandHandler("stop", door.stop))
-    application.add_handler(CommandHandler("last", door.last))
-    application.add_handler(CommandHandler("status", door.status))
-    application.add_handler(CommandHandler("lines", door.last_lines))
+    application.add_handlers(
+        [
+            CommandHandler(["start", "help"], door.help),
+            CommandHandler("status", door.status),
+            CommandHandler("alarm", door.alarm),
+            CommandHandler("stop", door.stop),
+            CommandHandler("last", door.last),
+            CommandHandler("lines", door.last_lines),
+        ]
+    )
 
     application.post_init = send_keyboard
 
