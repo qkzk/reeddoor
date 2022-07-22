@@ -8,14 +8,22 @@ Recognize a few commands to help me monitor Qdoor.
 """
 import logging
 import datetime
+import glob
 import os
 from functools import wraps
 from typing import Callable
 
-from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+)
 from telegram.ext import (
     Application,
     ApplicationBuilder,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
 )
@@ -34,6 +42,7 @@ Use :
 I'm running since {}.
 """
 LOGFILE_OPENINGS = "/home/pi/reeddoorlog/ouvertures.log"
+VIDEOS_DIR = "/var/lib/motion/*.mkv"
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -105,6 +114,14 @@ class DoorStatus:
             self._last_lines = self.__read_last_lines()
             return True
         return False
+
+    def last_video(self) -> str:
+        """Returns the last animation from motion folder."""
+        return max(glob.glob(VIDEOS_DIR), key=os.path.getmtime)
+
+    def last_videos_recorded(self) -> list:
+        """Returns a formated list of last 20 videos from motion folder."""
+        return sorted(glob.glob(VIDEOS_DIR), key=os.path.getmtime)[-20:]
 
     @property
     def last_edit(self) -> datetime.datetime:
@@ -193,6 +210,57 @@ class TalkingDoor:
             )
 
     @talk_to_me
+    async def last_vid(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
+        video = self.door_status.last_video()
+        await update.message.reply_text(
+            text=f"🎥 Last video: {self.filename_from_path(video)}"
+        )
+        with open(video, "rb") as video_stream:
+            await update.message.reply_video(video=video_stream)
+
+    @staticmethod
+    def filename_from_path(filepath: str) -> str:
+        """Extract the filename from a filepath"""
+        return filepath.split("/")[-1]
+
+    @talk_to_me
+    async def last_vids(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
+        """Sent the last 10 videos as an inline keyboard."""
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    f"🎬 {self.filename_from_path(video_path)}", callback_data=video_path
+                )
+            ]
+            for video_path in self.door_status.last_videos_recorded()
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("Please choose:", reply_markup=reply_markup)
+
+    @talk_to_me
+    async def button(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """
+        Parses the CallbackQuery and updates the message text.
+        Send the selected video.
+        """
+        query = update.callback_query
+
+        # CallbackQueries need to be answered, even if no notification to the user is needed
+        # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
+        await query.answer()
+
+        await query.edit_message_text(
+            text=f"🎬 Selected video: {self.filename_from_path(query.data)}"
+        )
+        try:
+            with open(query.data, "rb") as video_stream:
+                await context.bot.send_video(context._chat_id, video=video_stream)
+        except FileNotFoundError:
+            await query.edit_message_text(
+                text=f"🎬 Selected video {self.filename_from_path(query.data)} not found"
+            )
+
+    @talk_to_me
     async def last_lines(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
         """Repond with the last lines of the log."""
         self.door_status.update_status()
@@ -270,6 +338,10 @@ async def send_keyboard(application: Application):
                 KeyboardButton("/last"),
                 KeyboardButton("/lines"),
             ],
+            [
+                KeyboardButton("/last_vid"),
+                KeyboardButton("/last_vids"),
+            ],
         ]
     )
     await application.bot.sendMessage(
@@ -306,11 +378,14 @@ def main():
             CommandHandler(["start", "help"], door.help),
             CommandHandler("status", door.status),
             CommandHandler("alarm", door.alarm),
+            CommandHandler("last_vid", door.last_vid),
+            CommandHandler("last_vids", door.last_vids),
             CommandHandler("stop", door.stop),
             CommandHandler("last", door.last),
             CommandHandler("lines", door.last_lines),
         ]
     )
+    application.add_handler(CallbackQueryHandler(door.button))
 
     application.post_init = send_keyboard
 
