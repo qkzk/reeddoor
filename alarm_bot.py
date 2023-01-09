@@ -27,7 +27,7 @@ from telegram.ext import (
     CommandHandler,
     ContextTypes,
 )
-from bot_token import TOKEN, QKZKID
+from bot_token import TOKEN, QKZKID, MESKOID
 
 
 HELP_MESSAGE = """Hello qkzk 🍺! I'm qdoor alarm bot 🍇🐍🚪🚨
@@ -168,7 +168,7 @@ class TalkingDoor:
 
         @wraps(callback_method)
         async def wrapped(*args):
-            if len(args) < 1 or args[1].effective_user.id != QKZKID:
+            if len(args) < 1 or args[1].effective_user.id not in (QKZKID, MESKOID):
                 return
             return await callback_method(*args)
 
@@ -346,6 +346,11 @@ async def send_keyboard(application: Application):
     )
     await application.bot.sendMessage(
         chat_id=QKZKID,
+        text="qdoor 🚪 alarm bot started ! 🚨",
+        reply_markup=reply_markup,
+    )
+    await application.bot.sendMessage(
+        chat_id=MESKOID,
         text="qdoor 🚪 alarm bot started ! 🚨",
         reply_markup=reply_markup,
     )
