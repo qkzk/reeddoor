@@ -200,7 +200,11 @@ class TalkingDoor:
         """Send the alarm message"""
         if self.door_status.update_status():
             await context.bot.send_message(
-                context.job.chat_id,
+                MESKOID,
+                text=f"🐙{self.door_status.last_line}",
+            )
+            await context.bot.send_message(
+                QKZKID,
                 text=f"🐙{self.door_status.last_line}",
             )
         elif self.__verbose:
